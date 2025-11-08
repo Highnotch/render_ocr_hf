@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hugging Face File Processor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+        }
+        
+        .upload-section {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .upload-section h3 {
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        
+        .upload-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        #fileInput {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        #promptInput {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        #uploadButton {
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        #uploadButton:hover {
+            background-color: #218838;
+        }
+        
+        #uploadButton:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .chat-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .ai-message {
+            background-color: #e9ecef;
+            color: #333;
+            margin-right: auto;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #messageInput {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        #messageInput:focus {
+            border-color: #007bff;
+        }
+        
+        #sendButton {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        #sendButton:hover {
+            background-color: #0056b3;
+        }
+        
+        #sendButton:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Hugging Face File Processor</h1>
+        
+        <div class="info">
+            <strong>Welcome!</strong> This is a file processing application powered by Hugging Face's DeepSeek-OCR model. 
+            Upload images or PDFs to get AI-powered analysis, or just chat with the AI. This app is deployed on Render!
+        </div>
+        
+        <div class="upload-section">
+            <h3>📁 Upload File for Analysis</h3>
+            <div class="upload-container">
+                <input type="file" id="fileInput" accept="image/*,.pdf" />
+                <input type="text" id="promptInput" placeholder="What would you like to know about this file?" value="Describe this content in detail." />
+                <button id="uploadButton">Analyze File</button>
+            </div>
+        </div>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="message ai-message">
+                Hello! I'm your AI assistant. How can I help you today?
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            AI is thinking...
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Type your message here..." />
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const fileInput = document.getElementById('fileInput');
+        const promptInput = document.getElementById('promptInput');
+        const uploadButton = document.getElementById('uploadButton');
+        const loading = document.getElementById('loading');
+
+        function addMessage(content, isUser = false, isFile = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+            
+            if (isFile) {
+                messageDiv.innerHTML = `<strong>📁 File uploaded:</strong> ${content}`;
+            } else {
+                messageDiv.textContent = content;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = `Error: ${message}`;
+            chatContainer.appendChild(errorDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            const prompt = promptInput.value.trim();
+
+            if (!file) {
+                showError('Please select a file to upload.');
+                return;
+            }
+
+            if (!prompt) {
+                showError('Please enter a prompt.');
+                return;
+            }
+
+            // Add file upload message to chat
+            addMessage(`${file.name} - "${prompt}"`, true, true);
+            
+            // Disable upload button and show loading
+            uploadButton.disabled = true;
+            loading.style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('prompt', prompt);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showError(data.error);
+                } else {
+                    addMessage(data.response);
+                }
+            } catch (error) {
+                showError('Failed to upload file. Please try again.');
+            } finally {
+                // Re-enable upload button and hide loading
+                uploadButton.disabled = false;
+                loading.style.display = 'none';
+                fileInput.value = '';
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessage(message, true);
+            messageInput.value = '';
+            
+            // Disable input and show loading
+            sendButton.disabled = true;
+            loading.style.display = 'block';
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message }),
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showError(data.error);
+                } else {
+                    addMessage(data.response);
+                }
+            } catch (error) {
+                showError('Failed to connect to the server. Please try again.');
+            } finally {
+                // Re-enable input and hide loading
+                sendButton.disabled = false;
+                loading.style.display = 'none';
+                messageInput.focus();
+            }
+        }
+
+        // Event listeners
+        uploadButton.addEventListener('click', uploadFile);
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Focus on input when page loads
+        messageInput.focus();
+    </script>
+</body>
+</html>
