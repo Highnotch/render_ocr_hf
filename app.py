@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template
-from openai import OpenAI
+import requests
 import os
 import base64
 import mimetypes
@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import PyPDF2
 import io
 from PIL import Image
+import json
 
 # Load environment variables
 load_dotenv()
@@ -15,12 +16,33 @@ load_dotenv()
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-def get_hf_client():
-    """Get Hugging Face client"""
-    return OpenAI(
-        base_url="https://router.huggingface.co/v1",
-        api_key=os.getenv('HUGGINGFACE_API_KEY')
+def make_hf_request(messages):
+    """Make request to Hugging Face API using requests"""
+    api_key = os.getenv('HUGGINGFACE_API_KEY')
+    if not api_key:
+        raise Exception("Hugging Face API key not configured")
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": "deepseek-ai/DeepSeek-OCR:novita",
+        "messages": messages
+    }
+    
+    response = requests.post(
+        "https://router.huggingface.co/v1/chat/completions",
+        headers=headers,
+        json=data,
+        timeout=30
     )
+    
+    if response.status_code != 200:
+        raise Exception(f"API request failed: {response.status_code} - {response.text}")
+    
+    return response.json()
 
 @app.route('/')
 def home():
@@ -89,29 +111,26 @@ def upload_file():
             try:
                 image_url = encode_image_to_base64(file_content)
                 
-                client = get_hf_client()
-                completion = client.chat.completions.create(
-                    model="deepseek-ai/DeepSeek-OCR:novita",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": prompt
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": image_url
-                                    }
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url
                                 }
-                            ]
-                        }
-                    ],
-                )
+                            }
+                        ]
+                    }
+                ]
                 
-                ai_response = completion.choices[0].message.content
+                response_data = make_hf_request(messages)
+                ai_response = response_data['choices'][0]['message']['content']
                 
             except Exception as e:
                 return jsonify({'error': f'Error processing image: {str(e)}'}), 500
@@ -121,18 +140,15 @@ def upload_file():
             try:
                 extracted_text = convert_pdf_to_text(file_content)
                 
-                client = get_hf_client()
-                completion = client.chat.completions.create(
-                    model="deepseek-ai/DeepSeek-OCR:novita",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": f"{prompt}\n\nDocument content:\n{extracted_text[:4000]}"  # Limit text length
-                        }
-                    ],
-                )
+                messages = [
+                    {
+                        "role": "user",
+                        "content": f"{prompt}\n\nDocument content:\n{extracted_text[:4000]}"  # Limit text length
+                    }
+                ]
                 
-                ai_response = completion.choices[0].message.content
+                response_data = make_hf_request(messages)
+                ai_response = response_data['choices'][0]['message']['content']
                 
             except Exception as e:
                 return jsonify({'error': f'Error processing PDF: {str(e)}'}), 500
@@ -164,16 +180,13 @@ def chat():
             return jsonify({'error': 'Hugging Face API key not configured'}), 500
         
         # Make request to Hugging Face API
-        client = get_hf_client()
-        completion = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-OCR:novita",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_message}
-            ],
-        )
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": user_message}
+        ]
         
-        ai_response = completion.choices[0].message.content
+        response_data = make_hf_request(messages)
+        ai_response = response_data['choices'][0]['message']['content']
         
         return jsonify({
             'response': ai_response,
