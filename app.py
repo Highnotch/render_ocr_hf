@@ -15,11 +15,12 @@ load_dotenv()
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Set up Hugging Face client
-client = OpenAI(
-    base_url="https://router.huggingface.co/v1",
-    api_key=os.getenv('HUGGINGFACE_API_KEY')  # Changed from OPENAI_API_KEY
-)
+def get_hf_client():
+    """Get Hugging Face client"""
+    return OpenAI(
+        base_url="https://router.huggingface.co/v1",
+        api_key=os.getenv('HUGGINGFACE_API_KEY')
+    )
 
 @app.route('/')
 def home():
@@ -88,6 +89,7 @@ def upload_file():
             try:
                 image_url = encode_image_to_base64(file_content)
                 
+                client = get_hf_client()
                 completion = client.chat.completions.create(
                     model="deepseek-ai/DeepSeek-OCR:novita",
                     messages=[
@@ -119,6 +121,7 @@ def upload_file():
             try:
                 extracted_text = convert_pdf_to_text(file_content)
                 
+                client = get_hf_client()
                 completion = client.chat.completions.create(
                     model="deepseek-ai/DeepSeek-OCR:novita",
                     messages=[
@@ -161,6 +164,7 @@ def chat():
             return jsonify({'error': 'Hugging Face API key not configured'}), 500
         
         # Make request to Hugging Face API
+        client = get_hf_client()
         completion = client.chat.completions.create(
             model="deepseek-ai/DeepSeek-OCR:novita",
             messages=[
